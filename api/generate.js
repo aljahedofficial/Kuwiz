@@ -71,6 +71,79 @@ function normalizeQuestions(payload, expectedCount) {
     .filter((item) => item.question && item.options.length >= 4);
 }
 
+function splitIntoSentences(text) {
+  return String(text || '')
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?।])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length >= 30);
+}
+
+function extractKeywords(text, limit = 8) {
+  const stopWords = new Set([
+    'the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'was', 'were', 'have', 'has', 'had', 'not', 'you',
+    'your', 'into', 'their', 'they', 'them', 'his', 'her', 'its', 'will', 'would', 'about', 'which', 'what', 'when',
+    'where', 'who', 'whom', 'why', 'how', 'also', 'can', 'could', 'should', 'may', 'might', 'must', 'shall', 'been',
+    'এর', 'এবং', 'এই', 'ও', 'কে', 'কি', 'কী', 'কেন', 'কখন', 'কোথায়', 'কোন', 'যে', 'তার', 'তাদের', 'তিনি', 'তারা', 'ছিল'
+  ]);
+
+  const words = String(text || '')
+    .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 2);
+
+  const counts = new Map();
+  for (const word of words) {
+    const normalized = word.toLowerCase();
+    if (stopWords.has(normalized)) continue;
+    counts.set(normalized, (counts.get(normalized) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([word]) => word);
+}
+
+function buildOfflineQuestions({ extractedText, subject, language, batchStart, count }) {
+  const sentences = splitIntoSentences(extractedText);
+  const keywords = extractKeywords(extractedText, Math.max(12, count));
+  const questions = [];
+
+  for (let i = 0; i < count; i += 1) {
+    const sentence = sentences[(batchStart - 1 + i) % Math.max(sentences.length, 1)] || '';
+    const keyword = keywords[(batchStart - 1 + i) % Math.max(keywords.length, 1)] || subject;
+    const shortSentence = sentence.length > 140 ? `${sentence.slice(0, 137)}...` : sentence;
+    const lowerLanguage = language.toLowerCase();
+
+    questions.push({
+      question: lowerLanguage === 'bangla'
+        ? `নিচের অংশটি কোন ধারণাটির সাথে সবচেয়ে বেশি সম্পর্কিত?\n\n${shortSentence}`
+        : `Which idea is most closely related to the following excerpt?\n\n${shortSentence}`,
+      options: lowerLanguage === 'bangla'
+        ? [
+            `ডকুমেন্টে উল্লিখিত ${keyword}`,
+            'ডকুমেন্টে এর বিপরীত ধারণা',
+            'একটি অপ্রাসঙ্গিক তথ্য',
+            'সারাংশের বাইরে একটি বিষয়',
+          ]
+        : [
+            `The document mentions ${keyword}`,
+            'The opposite idea in the document',
+            'An unrelated detail',
+            'A point outside the summary',
+          ],
+      answerIndex: 0,
+      explanation: lowerLanguage === 'bangla'
+        ? `এই অংশটি ${keyword} বিষয়টি নির্দেশ করে।`
+        : `This excerpt points to ${keyword}.`,
+    });
+  }
+
+  return questions;
+}
+
 async function generateWithGroq(prompt) {
   if (!process.env.GROQ_API_KEY) return null;
 
@@ -103,27 +176,44 @@ async function generateWithGemini(prompt) {
 async function generateWithOpenRouter(prompt) {
   if (!process.env.OPENROUTER_API_KEY) return null;
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://github.com/aljahedofficial/Kuwiz',
-      'X-Title': 'Kuwiz',
-    },
-    body: JSON.stringify({
-      model: 'meta-llama/llama-3.3-70b-instruct:free',
-      temperature: 0.2,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
+  const models = [
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'meta-llama/llama-3.1-8b-instruct:free',
+    'qwen/qwen-2.5-72b-instruct:free',
+    'google/gemma-2-9b-it:free',
+  ];
 
-  if (!response.ok) {
-    throw new Error(`OpenRouter returned ${response.status}`);
+  let lastError = null;
+
+  for (const model of models) {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://github.com/aljahedofficial/Kuwiz',
+        'X-Title': 'Kuwiz',
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      lastError = new Error(`OpenRouter model ${model} returned ${response.status}`);
+      continue;
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content || null;
+    if (content) {
+      return content;
+    }
   }
 
-  const data = await response.json();
-  return data.choices[0]?.message?.content || null;
+  throw lastError || new Error('OpenRouter did not return usable content.');
 }
 
 async function generateBatch(prompt) {
@@ -150,7 +240,7 @@ async function generateBatch(prompt) {
     }
   }
 
-  throw lastError || new Error('All AI providers failed or returned invalid JSON.');
+  return { provider: 'Offline Fallback', parsed: null, error: lastError };
 }
 
 function buildPrompt({ subject, language, batchStart, batchEnd, batchSize, extractedText }) {
@@ -221,7 +311,16 @@ module.exports = async function handler(req, res) {
       const result = await generateBatch(prompt);
       providerUsed = result.provider;
 
-      const normalized = normalizeQuestions(result.parsed, count);
+      const normalized = result.parsed
+        ? normalizeQuestions(result.parsed, count)
+        : buildOfflineQuestions({
+            extractedText,
+            subject,
+            language,
+            batchStart: start,
+            count,
+          });
+
       if (!normalized.length) {
         throw new Error(`Batch ${batchIndex + 1} returned invalid quiz data.`);
       }
