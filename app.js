@@ -43,6 +43,8 @@ let quizTimedOut = false;
 let timerMode = 'default';
 let advanceTimeoutId = null;
 let providerDiagnostics = null;
+let providerAttempts = [];
+let extractedCharCount = 0;
 
 function getQuestionCount() {
   return Number(questionCountInput.value);
@@ -183,9 +185,25 @@ function buildAnalysis() {
   const correctItems = resolvedAnswers.filter((item) => item.answered && item.isCorrect);
 
   if (providerDiagnostics) {
-    diagnosticNote.textContent = `Provider status — Groq: ${providerDiagnostics.groqConfigured ? 'configured' : 'missing'}, Gemini: ${providerDiagnostics.geminiConfigured ? 'configured' : 'missing'}, OpenRouter: ${providerDiagnostics.openRouterConfigured ? 'configured' : 'missing'}.`;
+    diagnosticNote.textContent = `Provider status — Groq: ${providerDiagnostics.groqConfigured ? 'configured' : 'missing'}, Gemini: ${providerDiagnostics.geminiConfigured ? 'configured' : 'missing'}, OpenRouter: ${providerDiagnostics.openRouterConfigured ? 'configured' : 'missing'}. PDF extracted chars: ${extractedCharCount}.`;
   } else {
     diagnosticNote.textContent = '';
+  }
+
+  if (providerAttempts.length) {
+    const compact = providerAttempts
+      .map((batchEntry) => {
+        const entries = (batchEntry.attempts || []).map((attempt) => {
+          if (attempt.status === 'error') {
+            return `${attempt.provider}: ${attempt.message || 'error'}`;
+          }
+          return `${attempt.provider}: ${attempt.status}`;
+        });
+        return `Batch ${batchEntry.batch} -> ${entries.join(' | ')}`;
+      })
+      .join(' || ');
+
+    diagnosticNote.textContent = `${diagnosticNote.textContent} ${compact}`.trim();
   }
 
   incorrectList.innerHTML = incorrectItems.length
@@ -374,6 +392,8 @@ quizForm.addEventListener('submit', async (event) => {
   answeredCount = 0;
   answers = [];
   providerDiagnostics = null;
+  providerAttempts = [];
+  extractedCharCount = 0;
   quizTimedOut = false;
   stopTimer();
   stopAdvanceTimeout();
@@ -402,6 +422,8 @@ quizForm.addEventListener('submit', async (event) => {
 
     questions = data.questions || [];
     providerDiagnostics = data.providerAvailability || null;
+    providerAttempts = Array.isArray(data.providerAttempts) ? data.providerAttempts : [];
+    extractedCharCount = Number(data.extractedCharCount || 0);
     providerTag.textContent = data.fallback
       ? `Engine: Offline Fallback`
       : `Engine: ${data.provider || 'Unknown'}`;

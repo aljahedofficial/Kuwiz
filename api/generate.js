@@ -4,6 +4,7 @@ const pdfParse = require('pdf-parse');
 
 const MAX_BATCH_SIZE = 50;
 const MAX_EXTRACTED_CHARS = 30000;
+const BATCH_CONTEXT_CHARS = 7000;
 
 module.exports.config = {
   api: {
@@ -106,6 +107,16 @@ function extractKeywords(text, limit = 8) {
     .map(([word]) => word);
 }
 
+function getBatchContext(text, batchIndex, batchCount) {
+  const content = String(text || '');
+  if (!content) return '';
+  if (content.length <= BATCH_CONTEXT_CHARS) return content;
+
+  const totalWindows = Math.max(1, batchCount);
+  const windowStart = Math.floor((batchIndex / totalWindows) * Math.max(1, content.length - BATCH_CONTEXT_CHARS));
+  return content.slice(windowStart, windowStart + BATCH_CONTEXT_CHARS);
+}
+
 function buildOfflineQuestions({ extractedText, language, batchStart, count }) {
   const sentences = splitIntoSentences(extractedText);
   const keywords = extractKeywords(extractedText, Math.max(12, count));
@@ -124,9 +135,10 @@ function buildOfflineQuestions({ extractedText, language, batchStart, count }) {
     const keyword = keywords[(batchStart - 1 + i) % Math.max(keywords.length, 1)] || 'the topic';
     const nextKeyword = keywords[(batchStart + i) % Math.max(keywords.length, 1)] || 'a related concept';
     const prevKeyword = keywords[(batchStart - 2 + i + keywords.length) % Math.max(keywords.length, 1)] || 'related topic';
+    const altKeyword = keywords[(batchStart + i + 3) % Math.max(keywords.length, 1)] || 'main idea';
     const shortSentence = sentence.length > 140 ? `${sentence.slice(0, 137)}...` : sentence;
     const lowerLanguage = language.toLowerCase();
-    const correctPosition = i % 4;
+    const correctPosition = (batchStart + i) % 4;
 
     const baseQuestion = lowerLanguage === 'bangla'
       ? `নিচের অংশটি কোন ধারণাটির সাথে সবচেয়ে বেশি সম্পর্কিত?\n\n${shortSentence}`
@@ -139,15 +151,15 @@ function buildOfflineQuestions({ extractedText, language, batchStart, count }) {
     const optionsPool = lowerLanguage === 'bangla'
       ? [
           correctOption,
-          `এটি ${nextKeyword} ধারণার বিপরীত ব্যাখ্যা`,
-          `একটি অপ্রাসঙ্গিক ${prevKeyword} তথ্য`,
-          `সারাংশের বাইরে একটি বিষয়`,
+          `এটি ${nextKeyword} ধারণার ভিন্ন ব্যাখ্যা`,
+          `${prevKeyword} সম্পর্কিত কিন্তু প্রসঙ্গভিত্তিক নয়`,
+          `${altKeyword} নয়, বরং অন্য একটি বিষয়`,
         ]
       : [
           correctOption,
-          `It describes the opposite of ${nextKeyword}`,
-          `An unrelated detail about ${prevKeyword}`,
-          'A point outside the summary',
+          `A different explanation about ${nextKeyword}`,
+          `A nearby but context-mismatched point on ${prevKeyword}`,
+          `A different topic focused on ${altKeyword}`,
         ];
 
     const options = [
@@ -235,7 +247,8 @@ async function generateWithOpenRouter(prompt) {
     });
 
     if (!response.ok) {
-      lastError = new Error(`OpenRouter model ${model} returned ${response.status}`);
+      const bodyText = await response.text();
+      lastError = new Error(`OpenRouter model ${model} returned ${response.status}: ${bodyText.slice(0, 240)}`);
       continue;
     }
 
@@ -295,7 +308,7 @@ async function generateBatch(prompt) {
 function buildPrompt({ language, batchStart, batchEnd, batchSize, extractedText }) {
   return `
 You are an expert exam generator.
-You must create exactly ${batchSize} multiple-choice questions for Batch covering Questions ${batchStart} to ${batchEnd}.
+You must create up to ${batchSize} high-quality multiple-choice questions for Batch covering Questions ${batchStart} to ${batchEnd}.
 
 Language requirement: write the quiz in ${language}.
 If the PDF contains Bangla, English, or mixed text, preserve the original language where relevant.
@@ -345,20 +358,23 @@ module.exports = async function handler(req, res) {
     }
 
     const finalQuestions = [];
+    const allProviderAttempts = [];
     let providerUsed = '';
 
     for (let batchIndex = 0; batchIndex < batchCount; batchIndex += 1) {
       const { start, end, count } = getBatchSize(totalQuestions, batchIndex);
+      const batchContext = getBatchContext(extractedText, batchIndex, batchCount);
       const prompt = buildPrompt({
         language,
         batchStart: start,
         batchEnd: end,
         batchSize: count,
-        extractedText,
+        extractedText: batchContext,
       });
 
       const result = await generateBatch(prompt);
       providerUsed = result.provider;
+      allProviderAttempts.push({ batch: batchIndex + 1, attempts: result.attempts || [] });
 
       const normalized = result.parsed
         ? normalizeQuestions(result.parsed, count)
@@ -381,7 +397,9 @@ module.exports = async function handler(req, res) {
       provider: providerUsed,
       fallback: providerUsed === 'Offline Fallback',
       providerAvailability,
+      providerAttempts: allProviderAttempts,
       batchCount,
+      extractedCharCount: extractedText.length,
       totalQuestions: finalQuestions.length,
       requestedQuestions: totalQuestions,
       questions: finalQuestions,
