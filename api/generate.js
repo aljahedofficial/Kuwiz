@@ -106,7 +106,7 @@ function extractKeywords(text, limit = 8) {
     .map(([word]) => word);
 }
 
-function buildOfflineQuestions({ extractedText, subject, language, batchStart, count }) {
+function buildOfflineQuestions({ extractedText, language, batchStart, count }) {
   const sentences = splitIntoSentences(extractedText);
   const keywords = extractKeywords(extractedText, Math.max(12, count));
   const availableCount = Math.max(
@@ -121,8 +121,8 @@ function buildOfflineQuestions({ extractedText, subject, language, batchStart, c
 
   for (let i = 0; i < availableCount; i += 1) {
     const sentence = sentences[(batchStart - 1 + i) % Math.max(sentences.length, 1)] || '';
-    const keyword = keywords[(batchStart - 1 + i) % Math.max(keywords.length, 1)] || subject;
-    const nextKeyword = keywords[(batchStart + i) % Math.max(keywords.length, 1)] || `${subject} concept`;
+    const keyword = keywords[(batchStart - 1 + i) % Math.max(keywords.length, 1)] || 'the topic';
+    const nextKeyword = keywords[(batchStart + i) % Math.max(keywords.length, 1)] || 'a related concept';
     const prevKeyword = keywords[(batchStart - 2 + i + keywords.length) % Math.max(keywords.length, 1)] || 'related topic';
     const shortSentence = sentence.length > 140 ? `${sentence.slice(0, 137)}...` : sentence;
     const lowerLanguage = language.toLowerCase();
@@ -249,6 +249,14 @@ async function generateWithOpenRouter(prompt) {
   throw lastError || new Error('OpenRouter did not return usable content.');
 }
 
+function getProviderAvailability() {
+  return {
+    groqConfigured: Boolean(process.env.GROQ_API_KEY),
+    geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+    openRouterConfigured: Boolean(process.env.OPENROUTER_API_KEY),
+  };
+}
+
 async function generateBatch(prompt) {
   const providers = [
     { name: 'Groq Cloud', fn: generateWithGroq },
@@ -256,6 +264,7 @@ async function generateBatch(prompt) {
     { name: 'OpenRouter', fn: generateWithOpenRouter },
   ];
 
+  const attempts = [];
   let lastError = null;
 
   for (const provider of providers) {
@@ -264,21 +273,28 @@ async function generateBatch(prompt) {
       if (text) {
         const parsed = extractJsonFromText(text);
         if (parsed) {
-          return { provider: provider.name, parsed };
+          return { provider: provider.name, parsed, attempts };
         }
+
+        attempts.push({ provider: provider.name, status: 'invalid-json' });
+        lastError = new Error(`${provider.name} returned non-JSON content.`);
+        continue;
       }
+
+      attempts.push({ provider: provider.name, status: 'empty-response' });
     } catch (error) {
       lastError = error;
+      attempts.push({ provider: provider.name, status: 'error', message: error.message });
       console.warn(`${provider.name} failed:`, error.message);
     }
   }
 
-  return { provider: 'Offline Fallback', parsed: null, error: lastError };
+  return { provider: 'Offline Fallback', parsed: null, error: lastError, attempts };
 }
 
-function buildPrompt({ subject, language, batchStart, batchEnd, batchSize, extractedText }) {
+function buildPrompt({ language, batchStart, batchEnd, batchSize, extractedText }) {
   return `
-You are an expert exam generator for the subject: ${subject}.
+You are an expert exam generator.
 You must create exactly ${batchSize} multiple-choice questions for Batch covering Questions ${batchStart} to ${batchEnd}.
 
 Language requirement: write the quiz in ${language}.
@@ -315,10 +331,10 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const subject = String(req.headers['x-subject'] || 'General Knowledge');
     const language = String(req.headers['x-language'] || 'English');
     const totalQuestions = Math.min(300, Math.max(5, Number(req.headers['x-question-count'] || 50)));
     const batchCount = getBatchCount(totalQuestions);
+    const providerAvailability = getProviderAvailability();
 
     const buffer = await readRequestBuffer(req);
     const pdfData = await pdfParse(buffer);
@@ -334,7 +350,6 @@ module.exports = async function handler(req, res) {
     for (let batchIndex = 0; batchIndex < batchCount; batchIndex += 1) {
       const { start, end, count } = getBatchSize(totalQuestions, batchIndex);
       const prompt = buildPrompt({
-        subject,
         language,
         batchStart: start,
         batchEnd: end,
@@ -349,7 +364,6 @@ module.exports = async function handler(req, res) {
         ? normalizeQuestions(result.parsed, count)
         : buildOfflineQuestions({
             extractedText,
-            subject,
             language,
             batchStart: start,
             count,
@@ -366,14 +380,17 @@ module.exports = async function handler(req, res) {
       success: true,
       provider: providerUsed,
       fallback: providerUsed === 'Offline Fallback',
+      providerAvailability,
       batchCount,
       totalQuestions: finalQuestions.length,
+      requestedQuestions: totalQuestions,
       questions: finalQuestions,
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
       error: error.message,
+      providerAvailability: getProviderAvailability(),
     });
   }
 };

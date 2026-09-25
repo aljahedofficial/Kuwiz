@@ -28,6 +28,7 @@ const incorrectSection = document.getElementById('incorrect-section');
 const correctSection = document.getElementById('correct-section');
 const incorrectList = document.getElementById('incorrect-list');
 const correctList = document.getElementById('correct-list');
+const diagnosticNote = document.getElementById('diagnostic-note');
 
 let questions = [];
 let currentIndex = 0;
@@ -41,6 +42,7 @@ let quizStartAt = 0;
 let quizTimedOut = false;
 let timerMode = 'default';
 let advanceTimeoutId = null;
+let providerDiagnostics = null;
 
 function getQuestionCount() {
   return Number(questionCountInput.value);
@@ -180,6 +182,12 @@ function buildAnalysis() {
   const incorrectItems = resolvedAnswers.filter((item) => item.answered && !item.isCorrect);
   const correctItems = resolvedAnswers.filter((item) => item.answered && item.isCorrect);
 
+  if (providerDiagnostics) {
+    diagnosticNote.textContent = `Provider status — Groq: ${providerDiagnostics.groqConfigured ? 'configured' : 'missing'}, Gemini: ${providerDiagnostics.geminiConfigured ? 'configured' : 'missing'}, OpenRouter: ${providerDiagnostics.openRouterConfigured ? 'configured' : 'missing'}.`;
+  } else {
+    diagnosticNote.textContent = '';
+  }
+
   incorrectList.innerHTML = incorrectItems.length
     ? incorrectItems.map(renderAnswerCard).join('')
     : '<p class="timer-note">No incorrect answers.</p>';
@@ -292,11 +300,7 @@ function selectAnswer(selectedIndex, correctIndex, explanation) {
   stopAdvanceTimeout();
 
   if (selectedIndex === correctIndex) {
-    buttons[selectedIndex]?.classList.add('correct');
     score += 1;
-  } else {
-    buttons[selectedIndex]?.classList.add('incorrect');
-    buttons[correctIndex]?.classList.add('correct');
   }
 
   answeredCount += 1;
@@ -350,7 +354,6 @@ quizForm.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const fileInput = document.getElementById('pdf-file');
-  const subject = document.getElementById('subject').value.trim();
   const language = document.getElementById('language').value;
   const questionCount = getQuestionCount();
   const file = fileInput.files?.[0];
@@ -370,6 +373,7 @@ quizForm.addEventListener('submit', async (event) => {
   score = 0;
   answeredCount = 0;
   answers = [];
+  providerDiagnostics = null;
   quizTimedOut = false;
   stopTimer();
   stopAdvanceTimeout();
@@ -384,7 +388,6 @@ quizForm.addEventListener('submit', async (event) => {
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: {
-        'x-subject': subject,
         'x-language': language,
         'x-question-count': String(questionCount)
       },
@@ -398,6 +401,7 @@ quizForm.addEventListener('submit', async (event) => {
     }
 
     questions = data.questions || [];
+    providerDiagnostics = data.providerAvailability || null;
     providerTag.textContent = data.fallback
       ? `Engine: Offline Fallback`
       : `Engine: ${data.provider || 'Unknown'}`;

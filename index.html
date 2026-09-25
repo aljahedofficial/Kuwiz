@@ -29,11 +29,6 @@
           </label>
 
           <label class="field">
-            <span>Subject / Topic</span>
-            <input type="text" id="subject" placeholder="Physics, History, Computer Science" required />
-          </label>
-
-          <label class="field">
             <span>Quiz Language</span>
             <select id="language">
               <option value="English">English</option>
@@ -116,6 +111,8 @@
           <button type="button" id="show-incorrect-btn" class="secondary-btn">Show Incorrect Answers</button>
           <button type="button" id="show-correct-btn" class="secondary-btn">Show Correct Answers</button>
         </div>
+
+        <p id="diagnostic-note" class="timer-note"></p>
 
         <div id="incorrect-section" class="analysis-section hidden">
           <h4>Incorrect Answers</h4>
