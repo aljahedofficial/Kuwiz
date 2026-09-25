@@ -193,29 +193,63 @@ async function generateWithGroq(prompt) {
   if (!process.env.GROQ_API_KEY) return null;
 
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  const completion = await groq.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
-    temperature: 0.2,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const models = [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'gemma2-9b-it',
+  ];
 
-  return completion.choices[0]?.message?.content || null;
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const completion = await groq.chat.completions.create({
+        model,
+        temperature: 0.2,
+        messages: [{ role: 'user', content: prompt }],
+      });
+
+      const content = completion.choices[0]?.message?.content || null;
+      if (content) return content;
+    } catch (error) {
+      lastError = new Error(`Groq model ${model} failed: ${error.message}`);
+    }
+  }
+
+  throw lastError || new Error('Groq returned no usable content.');
 }
 
 async function generateWithGemini(prompt) {
   if (!process.env.GEMINI_API_KEY) return null;
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      temperature: 0.2,
-    },
-  });
+  const models = [
+    'gemini-3.8-flash',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+  ];
 
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  let lastError = null;
+
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0.2,
+        },
+      });
+
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      if (text) return text;
+    } catch (error) {
+      lastError = new Error(`Gemini model ${modelName} failed: ${error.message}`);
+    }
+  }
+
+  throw lastError || new Error('Gemini returned no usable content.');
 }
 
 async function generateWithOpenRouter(prompt) {
@@ -225,7 +259,7 @@ async function generateWithOpenRouter(prompt) {
     'meta-llama/llama-3.3-70b-instruct:free',
     'meta-llama/llama-3.1-8b-instruct:free',
     'qwen/qwen-2.5-72b-instruct:free',
-    'google/gemma-2-9b-it:free',
+    'mistralai/mistral-7b-instruct:free',
   ];
 
   let lastError = null;
