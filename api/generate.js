@@ -122,27 +122,52 @@ function buildOfflineQuestions({ extractedText, subject, language, batchStart, c
   for (let i = 0; i < availableCount; i += 1) {
     const sentence = sentences[(batchStart - 1 + i) % Math.max(sentences.length, 1)] || '';
     const keyword = keywords[(batchStart - 1 + i) % Math.max(keywords.length, 1)] || subject;
+    const nextKeyword = keywords[(batchStart + i) % Math.max(keywords.length, 1)] || `${subject} concept`;
+    const prevKeyword = keywords[(batchStart - 2 + i + keywords.length) % Math.max(keywords.length, 1)] || 'related topic';
     const shortSentence = sentence.length > 140 ? `${sentence.slice(0, 137)}...` : sentence;
     const lowerLanguage = language.toLowerCase();
+    const correctPosition = i % 4;
+
+    const baseQuestion = lowerLanguage === 'bangla'
+      ? `নিচের অংশটি কোন ধারণাটির সাথে সবচেয়ে বেশি সম্পর্কিত?\n\n${shortSentence}`
+      : `Which idea is most closely related to the following excerpt?\n\n${shortSentence}`;
+
+    const correctOption = lowerLanguage === 'bangla'
+      ? `ডকুমেন্টে উল্লিখিত ${keyword}`
+      : `The document mentions ${keyword}`;
+
+    const optionsPool = lowerLanguage === 'bangla'
+      ? [
+          correctOption,
+          `এটি ${nextKeyword} ধারণার বিপরীত ব্যাখ্যা`,
+          `একটি অপ্রাসঙ্গিক ${prevKeyword} তথ্য`,
+          `সারাংশের বাইরে একটি বিষয়`,
+        ]
+      : [
+          correctOption,
+          `It describes the opposite of ${nextKeyword}`,
+          `An unrelated detail about ${prevKeyword}`,
+          'A point outside the summary',
+        ];
+
+    const options = [
+      optionsPool[0],
+      optionsPool[1],
+      optionsPool[2],
+      optionsPool[3],
+    ];
+
+    if (correctPosition !== 0) {
+      const rotated = options.slice();
+      const [correct] = rotated.splice(0, 1);
+      rotated.splice(correctPosition, 0, correct);
+      options.splice(0, options.length, ...rotated);
+    }
 
     questions.push({
-      question: lowerLanguage === 'bangla'
-        ? `নিচের অংশটি কোন ধারণাটির সাথে সবচেয়ে বেশি সম্পর্কিত?\n\n${shortSentence}`
-        : `Which idea is most closely related to the following excerpt?\n\n${shortSentence}`,
-      options: lowerLanguage === 'bangla'
-        ? [
-            `ডকুমেন্টে উল্লিখিত ${keyword}`,
-            'ডকুমেন্টে এর বিপরীত ধারণা',
-            'একটি অপ্রাসঙ্গিক তথ্য',
-            'সারাংশের বাইরে একটি বিষয়',
-          ]
-        : [
-            `The document mentions ${keyword}`,
-            'The opposite idea in the document',
-            'An unrelated detail',
-            'A point outside the summary',
-          ],
-      answerIndex: 0,
+      question: baseQuestion,
+      options,
+      answerIndex: correctPosition,
       explanation: lowerLanguage === 'bangla'
         ? `এই অংশটি ${keyword} বিষয়টি নির্দেশ করে।`
         : `This excerpt points to ${keyword}.`,
@@ -340,6 +365,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       success: true,
       provider: providerUsed,
+      fallback: providerUsed === 'Offline Fallback',
       batchCount,
       totalQuestions: finalQuestions.length,
       questions: finalQuestions,

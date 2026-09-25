@@ -398,8 +398,14 @@ quizForm.addEventListener('submit', async (event) => {
     }
 
     questions = data.questions || [];
-    providerTag.textContent = `Engine: ${data.provider || 'Unknown'}`;
+    providerTag.textContent = data.fallback
+      ? `Engine: Offline Fallback`
+      : `Engine: ${data.provider || 'Unknown'}`;
     progressTag.textContent = `Batches: ${data.batchCount || 1}`;
+
+    if (data.fallback) {
+      estimatedTime.textContent = 'Offline mode is active. Add API keys in Vercel to enable live AI generation.';
+    }
 
     toggleHidden(loadingScreen, true);
     toggleHidden(quizScreen, false);
