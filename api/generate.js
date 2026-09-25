@@ -109,9 +109,17 @@ function extractKeywords(text, limit = 8) {
 function buildOfflineQuestions({ extractedText, subject, language, batchStart, count }) {
   const sentences = splitIntoSentences(extractedText);
   const keywords = extractKeywords(extractedText, Math.max(12, count));
+  const availableCount = Math.max(
+    1,
+    Math.min(
+      count,
+      sentences.length > 0 ? sentences.length : count,
+      Math.max(1, Math.ceil(extractedText.length / 250))
+    )
+  );
   const questions = [];
 
-  for (let i = 0; i < count; i += 1) {
+  for (let i = 0; i < availableCount; i += 1) {
     const sentence = sentences[(batchStart - 1 + i) % Math.max(sentences.length, 1)] || '';
     const keyword = keywords[(batchStart - 1 + i) % Math.max(keywords.length, 1)] || subject;
     const shortSentence = sentence.length > 140 ? `${sentence.slice(0, 137)}...` : sentence;
@@ -272,6 +280,7 @@ Rules:
 - answerIndex must be 0, 1, 2, or 3.
 - Keep explanations short and clear.
 - Do not repeat questions across batches.
+- If the source text is too small, return as many strong questions as possible instead of padding with weak or repeated items.
 `.trim();
 }
 
@@ -283,7 +292,7 @@ module.exports = async function handler(req, res) {
   try {
     const subject = String(req.headers['x-subject'] || 'General Knowledge');
     const language = String(req.headers['x-language'] || 'English');
-    const totalQuestions = Math.min(200, Math.max(30, Number(req.headers['x-question-count'] || 50)));
+    const totalQuestions = Math.min(300, Math.max(5, Number(req.headers['x-question-count'] || 50)));
     const batchCount = getBatchCount(totalQuestions);
 
     const buffer = await readRequestBuffer(req);

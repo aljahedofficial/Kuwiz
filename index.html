@@ -16,7 +16,7 @@
       <div class="badge">Kuwiz</div>
       <h1>Free AI PDF Quiz Builder</h1>
       <p class="subtitle">
-        Upload one PDF, choose 30 to 200 questions, and generate the quiz in 50-question batches to reduce token exhaustion.
+        Upload one PDF, choose 5 to 300 questions, and generate the quiz in 50-question batches to reduce token exhaustion.
       </p>
     </section>
 
@@ -44,17 +44,42 @@
 
           <label class="field">
             <span>Question Count</span>
-            <input type="range" id="question-count" min="30" max="200" step="1" value="50" />
+            <input type="range" id="question-count" min="5" max="300" step="1" value="50" />
             <div class="range-row">
-              <small>30</small>
+              <small>5</small>
               <strong id="question-count-value">50</strong>
-              <small>200</small>
+              <small>300</small>
+            </div>
+          </label>
+
+          <div class="field timer-field">
+            <span>Timer Mode</span>
+            <div class="timer-toggle">
+              <label class="timer-option">
+                <input type="radio" name="timer-mode" value="default" checked />
+                <span>Default</span>
+              </label>
+              <label class="timer-option">
+                <input type="radio" name="timer-mode" value="custom" />
+                <span>Custom</span>
+              </label>
+            </div>
+            <p id="estimated-time" class="timer-note"></p>
+          </div>
+
+          <label class="field" id="custom-timer-wrap">
+            <span>Custom Timer (minutes)</span>
+            <input type="range" id="custom-timer" min="1" max="120" step="1" value="30" />
+            <div class="range-row">
+              <small>1</small>
+              <strong id="custom-timer-value">30</strong>
+              <small>120</small>
             </div>
           </label>
         </div>
 
         <div class="hint">
-          Batches are generated in groups of up to 50 questions each.
+          Batches are generated in groups of up to 50 questions each. Default timer uses 3 questions per minute.
         </div>
 
         <button type="submit" class="primary-btn" id="generate-btn">Generate Quiz</button>
@@ -71,6 +96,7 @@
       <div class="quiz-topline">
         <span id="provider-tag" class="pill"></span>
         <span id="progress-tag" class="pill subtle"></span>
+        <span id="timer-tag" class="pill timer-pill"></span>
       </div>
 
       <p id="question-tracker" class="tracker"></p>
@@ -84,6 +110,10 @@
       <h2>Quiz Completed</h2>
       <p class="subtitle">Your final score</p>
       <div id="final-score" class="score"></div>
+      <div class="analysis-box">
+        <h3>Analysis</h3>
+        <div id="analysis-grid" class="analysis-grid"></div>
+      </div>
       <button class="primary-btn" onclick="location.reload()">Generate Another Quiz</button>
     </section>
   </main>

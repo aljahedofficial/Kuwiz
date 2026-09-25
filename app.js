@@ -6,6 +6,12 @@ const quizScreen = document.getElementById('quiz-screen');
 const resultScreen = document.getElementById('result-screen');
 const questionCountInput = document.getElementById('question-count');
 const questionCountValue = document.getElementById('question-count-value');
+const customTimerInput = document.getElementById('custom-timer');
+const customTimerValue = document.getElementById('custom-timer-value');
+const customTimerWrap = document.getElementById('custom-timer-wrap');
+const estimatedTime = document.getElementById('estimated-time');
+const timerTag = document.getElementById('timer-tag');
+const timerModeInputs = document.querySelectorAll('input[name="timer-mode"]');
 
 const generateBtn = document.getElementById('generate-btn');
 const providerTag = document.getElementById('provider-tag');
@@ -16,10 +22,140 @@ const optionsContainer = document.getElementById('options-container');
 const explanationBox = document.getElementById('explanation-box');
 const nextBtn = document.getElementById('next-btn');
 const finalScore = document.getElementById('final-score');
+const analysisGrid = document.getElementById('analysis-grid');
 
 let questions = [];
 let currentIndex = 0;
 let score = 0;
+let answeredCount = 0;
+let timerId = null;
+let timerRemainingSeconds = 0;
+let timerLimitSeconds = 0;
+let quizStartAt = 0;
+let quizTimedOut = false;
+let timerMode = 'default';
+
+function getQuestionCount() {
+  return Number(questionCountInput.value);
+}
+
+function getDefaultTimerMinutes(questionCount) {
+  return Math.min(120, Math.max(1, Math.ceil(questionCount / 3)));
+}
+
+function getSelectedTimerMode() {
+  return document.querySelector('input[name="timer-mode"]:checked')?.value || 'default';
+}
+
+function getCustomTimerMinutes() {
+  return Math.min(120, Math.max(1, Number(customTimerInput.value) || 30));
+}
+
+function getActiveTimerMinutes(questionCount) {
+  return timerMode === 'custom'
+    ? getCustomTimerMinutes()
+    : getDefaultTimerMinutes(questionCount);
+}
+
+function formatTime(totalSeconds) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function updateEstimatedTimeLabel() {
+  const questionCount = getQuestionCount();
+  const defaultMinutes = getDefaultTimerMinutes(questionCount);
+  const customMinutes = getCustomTimerMinutes();
+
+  if (timerMode === 'custom') {
+    estimatedTime.textContent = `Estimated time: ${customMinutes} minute(s) selected for the quiz.`;
+    customTimerWrap.classList.remove('hidden');
+  } else {
+    estimatedTime.textContent = `Estimated time: about ${defaultMinutes} minute(s) at 3 questions per minute.`;
+    customTimerWrap.classList.add('hidden');
+  }
+
+  customTimerValue.textContent = String(customMinutes);
+}
+
+function stopTimer() {
+  if (timerId) {
+    clearInterval(timerId);
+    timerId = null;
+  }
+}
+
+function updateTimerTag() {
+  timerTag.textContent = `Time Left: ${formatTime(timerRemainingSeconds)}`;
+}
+
+function startTimer(questionCount) {
+  stopTimer();
+  timerMode = getSelectedTimerMode();
+  timerLimitSeconds = getActiveTimerMinutes(questionCount) * 60;
+  timerRemainingSeconds = timerLimitSeconds;
+  quizStartAt = Date.now();
+  quizTimedOut = false;
+  updateTimerTag();
+
+  timerId = setInterval(() => {
+    timerRemainingSeconds -= 1;
+    if (timerRemainingSeconds <= 0) {
+      timerRemainingSeconds = 0;
+      updateTimerTag();
+      endQuiz(true);
+      return;
+    }
+
+    updateTimerTag();
+  }, 1000);
+}
+
+function buildAnalysis() {
+  const attempted = answeredCount;
+  const incorrect = Math.max(0, attempted - score);
+  const unanswered = Math.max(0, questions.length - attempted);
+  const accuracy = attempted > 0 ? Math.round((score / attempted) * 100) : 0;
+  const completion = questions.length > 0 ? Math.round((attempted / questions.length) * 100) : 0;
+  const elapsedSeconds = quizStartAt ? Math.max(0, Math.round((Date.now() - quizStartAt) / 1000)) : 0;
+  const elapsedLabel = formatTime(quizTimedOut ? timerLimitSeconds : elapsedSeconds);
+  const modeLabel = timerMode === 'custom'
+    ? `Custom (${Math.round(timerLimitSeconds / 60)} minute(s))`
+    : `Default (${Math.round(timerLimitSeconds / 60)} minute(s))`;
+
+  const items = [
+    ['Questions Generated', String(questions.length)],
+    ['Answered', String(attempted)],
+    ['Correct', String(score)],
+    ['Incorrect', String(incorrect)],
+    ['Unanswered', String(unanswered)],
+    ['Accuracy', `${accuracy}%`],
+    ['Completion', `${completion}%`],
+    ['Timer Mode', modeLabel],
+    ['Time Used', elapsedLabel],
+    ['Status', quizTimedOut ? 'Time expired' : 'Completed'],
+  ];
+
+  analysisGrid.innerHTML = items.map(([label, value]) => `
+    <div class="analysis-item">
+      <span class="analysis-label">${label}</span>
+      <span class="analysis-value">${value}</span>
+    </div>
+  `).join('');
+}
+
+function endQuiz(timedOut = false) {
+  if (resultScreen && !quizScreen.classList.contains('hidden')) {
+    quizTimedOut = timedOut;
+    stopTimer();
+    toggleHidden(quizScreen, true);
+    toggleHidden(resultScreen, false);
+    finalScore.textContent = `${score} / ${questions.length}`;
+    buildAnalysis();
+  }
+}
 
 function toggleHidden(element, hidden) {
   element.classList.toggle('hidden', hidden);
@@ -70,6 +206,8 @@ function renderQuestion() {
 }
 
 function selectAnswer(selectedIndex, correctIndex, explanation) {
+  if (quizTimedOut) return;
+
   const buttons = document.querySelectorAll('.option-btn');
   buttons.forEach((button) => {
     button.disabled = true;
@@ -82,6 +220,8 @@ function selectAnswer(selectedIndex, correctIndex, explanation) {
     buttons[selectedIndex]?.classList.add('incorrect');
     buttons[correctIndex]?.classList.add('correct');
   }
+
+  answeredCount += 1;
 
   explanationBox.textContent = `Explanation: ${explanation || 'No explanation provided.'}`;
   explanationBox.classList.remove('hidden');
@@ -102,14 +242,32 @@ function selectAnswer(selectedIndex, correctIndex, explanation) {
 }
 
 function showResults() {
+  quizTimedOut = false;
+  stopTimer();
   toggleHidden(quizScreen, true);
   toggleHidden(resultScreen, false);
   finalScore.textContent = `${score} / ${questions.length}`;
+  buildAnalysis();
 }
 
 questionCountInput.addEventListener('input', () => {
   questionCountValue.textContent = questionCountInput.value;
+  updateEstimatedTimeLabel();
 });
+
+customTimerInput.addEventListener('input', () => {
+  customTimerValue.textContent = customTimerInput.value;
+  updateEstimatedTimeLabel();
+});
+
+timerModeInputs.forEach((input) => {
+  input.addEventListener('change', () => {
+    timerMode = getSelectedTimerMode();
+    updateEstimatedTimeLabel();
+  });
+});
+
+updateEstimatedTimeLabel();
 
 quizForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -117,7 +275,7 @@ quizForm.addEventListener('submit', async (event) => {
   const fileInput = document.getElementById('pdf-file');
   const subject = document.getElementById('subject').value.trim();
   const language = document.getElementById('language').value;
-  const questionCount = Number(questionCountInput.value);
+  const questionCount = getQuestionCount();
   const file = fileInput.files?.[0];
 
   if (!file) {
@@ -125,18 +283,22 @@ quizForm.addEventListener('submit', async (event) => {
     return;
   }
 
-  if (questionCount < 30 || questionCount > 200) {
-    alert('Question count must be between 30 and 200.');
+  if (questionCount < 5 || questionCount > 300) {
+    alert('Question count must be between 5 and 300.');
     return;
   }
 
   questions = [];
   currentIndex = 0;
   score = 0;
+  answeredCount = 0;
+  quizTimedOut = false;
+  stopTimer();
 
   toggleHidden(setupScreen, true);
   toggleHidden(loadingScreen, false);
-  loadingMessage.textContent = `Generating ${questionCount} questions in batches of 50...`;
+  const batches = Math.max(1, Math.ceil(questionCount / 50));
+  loadingMessage.textContent = `Generating ${questionCount} questions in ${batches} batch(es) of up to 50...`;
   generateBtn.disabled = true;
 
   try {
@@ -163,12 +325,15 @@ quizForm.addEventListener('submit', async (event) => {
     toggleHidden(loadingScreen, true);
     toggleHidden(quizScreen, false);
 
+    startTimer(questions.length || questionCount);
+
     if (!questions.length) {
       throw new Error('No questions were returned by the AI provider.');
     }
 
     renderQuestion();
   } catch (error) {
+    stopTimer();
     alert(`Error: ${error.message}`);
     location.reload();
   } finally {
