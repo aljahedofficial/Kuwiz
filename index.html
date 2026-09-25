@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kuwiz — Free PDF Quiz Generator</title>
+  <meta name="description" content="Upload a PDF and generate a quiz in batches using free AI provider fallbacks." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="hero card">
+      <div class="badge">Kuwiz</div>
+      <h1>Free AI PDF Quiz Builder</h1>
+      <p class="subtitle">
+        Upload one PDF, choose 30 to 200 questions, and generate the quiz in 50-question batches to reduce token exhaustion.
+      </p>
+    </section>
+
+    <section class="card form-card" id="setup-screen">
+      <form id="quiz-form">
+        <div class="grid">
+          <label class="field">
+            <span>PDF Document</span>
+            <input type="file" id="pdf-file" accept="application/pdf" required />
+          </label>
+
+          <label class="field">
+            <span>Subject / Topic</span>
+            <input type="text" id="subject" placeholder="Physics, History, Computer Science" required />
+          </label>
+
+          <label class="field">
+            <span>Quiz Language</span>
+            <select id="language">
+              <option value="English">English</option>
+              <option value="Bangla">Bangla</option>
+              <option value="Mixed">Mixed Bangla + English</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Question Count</span>
+            <input type="range" id="question-count" min="30" max="200" step="1" value="50" />
+            <div class="range-row">
+              <small>30</small>
+              <strong id="question-count-value">50</strong>
+              <small>200</small>
+            </div>
+          </label>
+        </div>
+
+        <div class="hint">
+          Batches are generated in groups of up to 50 questions each.
+        </div>
+
+        <button type="submit" class="primary-btn" id="generate-btn">Generate Quiz</button>
+      </form>
+    </section>
+
+    <section class="card status-card hidden" id="loading-screen">
+      <div class="spinner"></div>
+      <h2>Generating Quiz</h2>
+      <p id="loading-message">Preparing PDF and starting batch generation...</p>
+    </section>
+
+    <section class="card quiz-card hidden" id="quiz-screen">
+      <div class="quiz-topline">
+        <span id="provider-tag" class="pill"></span>
+        <span id="progress-tag" class="pill subtle"></span>
+      </div>
+
+      <p id="question-tracker" class="tracker"></p>
+      <h2 id="question-text" class="question"></h2>
+      <div id="options-container" class="options"></div>
+      <div id="explanation-box" class="explanation hidden"></div>
+      <button id="next-btn" class="primary-btn hidden">Next Question</button>
+    </section>
+
+    <section class="card result-card hidden" id="result-screen">
+      <h2>Quiz Completed</h2>
+      <p class="subtitle">Your final score</p>
+      <div id="final-score" class="score"></div>
+      <button class="primary-btn" onclick="location.reload()">Generate Another Quiz</button>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
