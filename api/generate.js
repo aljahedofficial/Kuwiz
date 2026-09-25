@@ -196,10 +196,10 @@ async function generateWithGroq(prompt) {
   const models = [
     'llama-3.3-70b-versatile',
     'llama-3.1-8b-instant',
-    'gemma2-9b-it',
+    'llama-3.1-70b-versatile',
   ];
 
-  let lastError = null;
+  const attemptErrors = [];
 
   for (const model of models) {
     try {
@@ -212,11 +212,11 @@ async function generateWithGroq(prompt) {
       const content = completion.choices[0]?.message?.content || null;
       if (content) return content;
     } catch (error) {
-      lastError = new Error(`Groq model ${model} failed: ${error.message}`);
+      attemptErrors.push(`Groq model ${model} failed: ${error.message}`);
     }
   }
 
-  throw lastError || new Error('Groq returned no usable content.');
+  throw new Error(attemptErrors.length ? attemptErrors.join(' | ') : 'Groq returned no usable content.');
 }
 
 async function generateWithGemini(prompt) {
@@ -225,11 +225,11 @@ async function generateWithGemini(prompt) {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const models = [
     'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
     'gemini-2.5-flash',
-    'gemini-2.5-flash-lite',
   ];
 
-  let lastError = null;
+  const attemptErrors = [];
 
   for (const modelName of models) {
     try {
@@ -245,24 +245,25 @@ async function generateWithGemini(prompt) {
       const text = result.response.text();
       if (text) return text;
     } catch (error) {
-      lastError = new Error(`Gemini model ${modelName} failed: ${error.message}`);
+      attemptErrors.push(`Gemini model ${modelName} failed: ${error.message}`);
     }
   }
 
-  throw lastError || new Error('Gemini returned no usable content.');
+  throw new Error(attemptErrors.length ? attemptErrors.join(' | ') : 'Gemini returned no usable content.');
 }
 
 async function generateWithOpenRouter(prompt) {
   if (!process.env.OPENROUTER_API_KEY) return null;
 
   const models = [
+    'openrouter/auto',
     'meta-llama/llama-3.3-70b-instruct:free',
     'meta-llama/llama-3.1-8b-instruct:free',
     'qwen/qwen-2.5-72b-instruct:free',
-    'mistralai/mistral-7b-instruct:free',
+    'google/gemma-3-4b-it:free',
   ];
 
-  let lastError = null;
+  const attemptErrors = [];
 
   for (const model of models) {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -282,7 +283,7 @@ async function generateWithOpenRouter(prompt) {
 
     if (!response.ok) {
       const bodyText = await response.text();
-      lastError = new Error(`OpenRouter model ${model} returned ${response.status}: ${bodyText.slice(0, 240)}`);
+      attemptErrors.push(`OpenRouter model ${model} returned ${response.status}: ${bodyText.slice(0, 180)}`);
       continue;
     }
 
@@ -291,9 +292,11 @@ async function generateWithOpenRouter(prompt) {
     if (content) {
       return content;
     }
+
+    attemptErrors.push(`OpenRouter model ${model} returned empty content.`);
   }
 
-  throw lastError || new Error('OpenRouter did not return usable content.');
+  throw new Error(attemptErrors.length ? attemptErrors.join(' | ') : 'OpenRouter did not return usable content.');
 }
 
 function getProviderAvailability() {
