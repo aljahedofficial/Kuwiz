@@ -20,20 +20,27 @@ const tracker = document.getElementById('question-tracker');
 const questionText = document.getElementById('question-text');
 const optionsContainer = document.getElementById('options-container');
 const explanationBox = document.getElementById('explanation-box');
-const nextBtn = document.getElementById('next-btn');
 const finalScore = document.getElementById('final-score');
 const analysisGrid = document.getElementById('analysis-grid');
+const showIncorrectBtn = document.getElementById('show-incorrect-btn');
+const showCorrectBtn = document.getElementById('show-correct-btn');
+const incorrectSection = document.getElementById('incorrect-section');
+const correctSection = document.getElementById('correct-section');
+const incorrectList = document.getElementById('incorrect-list');
+const correctList = document.getElementById('correct-list');
 
 let questions = [];
 let currentIndex = 0;
 let score = 0;
 let answeredCount = 0;
+let answers = [];
 let timerId = null;
 let timerRemainingSeconds = 0;
 let timerLimitSeconds = 0;
 let quizStartAt = 0;
 let quizTimedOut = false;
 let timerMode = 'default';
+let advanceTimeoutId = null;
 
 function getQuestionCount() {
   return Number(questionCountInput.value);
@@ -84,6 +91,13 @@ function stopTimer() {
   if (timerId) {
     clearInterval(timerId);
     timerId = null;
+  }
+}
+
+function stopAdvanceTimeout() {
+  if (advanceTimeoutId) {
+    clearTimeout(advanceTimeoutId);
+    advanceTimeoutId = null;
   }
 }
 
@@ -144,12 +158,78 @@ function buildAnalysis() {
       <span class="analysis-value">${value}</span>
     </div>
   `).join('');
+
+  const resolvedAnswers = questions.map((question, index) => {
+    const answer = answers[index] || null;
+    const selectedIndex = answer ? answer.selectedIndex : null;
+    const correctIndex = Number.isInteger(question.answerIndex) ? question.answerIndex : 0;
+    const correctOption = question.options?.[correctIndex] || 'Unknown';
+    const selectedOption = answer && selectedIndex !== null ? question.options?.[selectedIndex] || 'No answer' : 'No answer';
+
+    return {
+      index: index + 1,
+      question: question.question,
+      selectedOption,
+      correctOption,
+      explanation: question.explanation || 'No explanation provided.',
+      isCorrect: answer ? answer.selectedIndex === correctIndex : false,
+      answered: Boolean(answer),
+    };
+  });
+
+  const incorrectItems = resolvedAnswers.filter((item) => item.answered && !item.isCorrect);
+  const correctItems = resolvedAnswers.filter((item) => item.answered && item.isCorrect);
+
+  incorrectList.innerHTML = incorrectItems.length
+    ? incorrectItems.map(renderAnswerCard).join('')
+    : '<p class="timer-note">No incorrect answers.</p>';
+
+  correctList.innerHTML = correctItems.length
+    ? correctItems.map(renderAnswerCard).join('')
+    : '<p class="timer-note">No correct answers yet.</p>';
+
+  bindExplanationToggles();
+}
+
+function renderAnswerCard(item) {
+  const statusClass = item.isCorrect ? 'correct' : 'incorrect';
+  const answerLabel = item.answered ? item.selectedOption : 'No answer';
+  return `
+    <div class="answer-card ${statusClass}">
+      <h5>Q${item.index}. ${item.question}</h5>
+      <div class="answer-meta">
+        <div><strong>Your answer:</strong> ${answerLabel}</div>
+        <div><strong>Correct answer:</strong> ${item.correctOption}</div>
+      </div>
+      <button type="button" class="explanation-toggle" data-explanation-target="explanation-${item.index}">Show Explanation</button>
+      <div id="explanation-${item.index}" class="answer-explanation hidden">${item.explanation}</div>
+    </div>
+  `;
+}
+
+function bindExplanationToggles() {
+  document.querySelectorAll('.explanation-toggle').forEach((button) => {
+    button.addEventListener('click', () => {
+      const targetId = button.getAttribute('data-explanation-target');
+      const target = document.getElementById(targetId);
+      if (!target) return;
+
+      const isHidden = target.classList.contains('hidden');
+      target.classList.toggle('hidden');
+      button.textContent = isHidden ? 'Hide Explanation' : 'Show Explanation';
+    });
+  });
+}
+
+function renderAnswerSelection(answer) {
+  answers[answer.questionIndex] = answer;
 }
 
 function endQuiz(timedOut = false) {
   if (resultScreen && !quizScreen.classList.contains('hidden')) {
     quizTimedOut = timedOut;
     stopTimer();
+    stopAdvanceTimeout();
     toggleHidden(quizScreen, true);
     toggleHidden(resultScreen, false);
     finalScore.textContent = `${score} / ${questions.length}`;
@@ -187,10 +267,6 @@ function renderQuestion() {
   setQuizProgress();
   questionText.textContent = q.question;
   optionsContainer.innerHTML = '';
-  explanationBox.classList.add('hidden');
-  explanationBox.textContent = '';
-  nextBtn.classList.add('hidden');
-  nextBtn.disabled = false;
 
   (q.options || []).forEach((option, idx) => {
     const btn = document.createElement('button');
@@ -213,6 +289,8 @@ function selectAnswer(selectedIndex, correctIndex, explanation) {
     button.disabled = true;
   });
 
+  stopAdvanceTimeout();
+
   if (selectedIndex === correctIndex) {
     buttons[selectedIndex]?.classList.add('correct');
     score += 1;
@@ -222,28 +300,27 @@ function selectAnswer(selectedIndex, correctIndex, explanation) {
   }
 
   answeredCount += 1;
+  renderAnswerSelection({
+    questionIndex: currentIndex,
+    selectedIndex,
+    correctIndex,
+    explanation: explanation || 'No explanation provided.',
+  });
 
-  explanationBox.textContent = `Explanation: ${explanation || 'No explanation provided.'}`;
-  explanationBox.classList.remove('hidden');
-  renderMath(explanationBox);
-
-  if (currentIndex + 1 < questions.length) {
-    nextBtn.textContent = 'Next Question';
-    nextBtn.onclick = () => {
+  advanceTimeoutId = window.setTimeout(() => {
+    if (currentIndex + 1 < questions.length) {
       currentIndex += 1;
       renderQuestion();
-    };
-  } else {
-    nextBtn.textContent = 'See Final Results';
-    nextBtn.onclick = showResults;
-  }
-
-  nextBtn.classList.remove('hidden');
+    } else {
+      showResults();
+    }
+  }, 550);
 }
 
 function showResults() {
   quizTimedOut = false;
   stopTimer();
+  stopAdvanceTimeout();
   toggleHidden(quizScreen, true);
   toggleHidden(resultScreen, false);
   finalScore.textContent = `${score} / ${questions.length}`;
@@ -292,8 +369,10 @@ quizForm.addEventListener('submit', async (event) => {
   currentIndex = 0;
   score = 0;
   answeredCount = 0;
+  answers = [];
   quizTimedOut = false;
   stopTimer();
+  stopAdvanceTimeout();
 
   toggleHidden(setupScreen, true);
   toggleHidden(loadingScreen, false);
@@ -334,9 +413,24 @@ quizForm.addEventListener('submit', async (event) => {
     renderQuestion();
   } catch (error) {
     stopTimer();
+    stopAdvanceTimeout();
     alert(`Error: ${error.message}`);
     location.reload();
   } finally {
     generateBtn.disabled = false;
+  }
+});
+
+showIncorrectBtn.addEventListener('click', () => {
+  incorrectSection.classList.toggle('hidden');
+  if (!incorrectSection.classList.contains('hidden')) {
+    correctSection.classList.add('hidden');
+  }
+});
+
+showCorrectBtn.addEventListener('click', () => {
+  correctSection.classList.toggle('hidden');
+  if (!correctSection.classList.contains('hidden')) {
+    incorrectSection.classList.add('hidden');
   }
 });

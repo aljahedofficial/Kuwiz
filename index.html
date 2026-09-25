@@ -102,8 +102,6 @@
       <p id="question-tracker" class="tracker"></p>
       <h2 id="question-text" class="question"></h2>
       <div id="options-container" class="options"></div>
-      <div id="explanation-box" class="explanation hidden"></div>
-      <button id="next-btn" class="primary-btn hidden">Next Question</button>
     </section>
 
     <section class="card result-card hidden" id="result-screen">
@@ -113,6 +111,21 @@
       <div class="analysis-box">
         <h3>Analysis</h3>
         <div id="analysis-grid" class="analysis-grid"></div>
+
+        <div class="analysis-actions">
+          <button type="button" id="show-incorrect-btn" class="secondary-btn">Show Incorrect Answers</button>
+          <button type="button" id="show-correct-btn" class="secondary-btn">Show Correct Answers</button>
+        </div>
+
+        <div id="incorrect-section" class="analysis-section hidden">
+          <h4>Incorrect Answers</h4>
+          <div id="incorrect-list" class="answer-list"></div>
+        </div>
+
+        <div id="correct-section" class="analysis-section hidden">
+          <h4>Correct Answers</h4>
+          <div id="correct-list" class="answer-list"></div>
+        </div>
       </div>
       <button class="primary-btn" onclick="location.reload()">Generate Another Quiz</button>
     </section>

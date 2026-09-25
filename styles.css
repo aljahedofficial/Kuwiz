@@ -240,6 +240,10 @@ input[type="range"] {
   margin-bottom: 18px;
 }
 
+.quiz-card {
+  padding-right: 190px;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -258,6 +262,14 @@ input[type="range"] {
 
 .timer-pill {
   margin-left: auto;
+  position: fixed;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+  min-width: 128px;
+  justify-content: center;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
 }
 
 .tracker {
@@ -267,8 +279,8 @@ input[type="range"] {
 }
 
 .question {
-  font-size: clamp(1.2rem, 2vw, 1.65rem);
-  line-height: 1.55;
+  font-size: clamp(1rem, 1.6vw, 1.35rem);
+  line-height: 1.45;
   margin-bottom: 18px;
   white-space: pre-wrap;
 }
@@ -350,6 +362,90 @@ input[type="range"] {
   gap: 12px;
 }
 
+.analysis-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 18px 0 10px;
+}
+
+.secondary-btn {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(17, 24, 39, 0.95);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.analysis-section {
+  margin-top: 18px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.analysis-section h4 {
+  margin-bottom: 12px;
+  font-size: 0.95rem;
+  color: #e2e8f0;
+}
+
+.answer-list {
+  display: grid;
+  gap: 12px;
+}
+
+.answer-card {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(17, 24, 39, 0.9);
+  border: 1px solid var(--border);
+}
+
+.answer-card.correct {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.answer-card.incorrect {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.answer-card h5 {
+  margin: 0 0 10px;
+  font-size: 0.98rem;
+  line-height: 1.45;
+}
+
+.answer-meta {
+  display: grid;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 0.92rem;
+}
+
+.answer-explanation {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid var(--border);
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.explanation-toggle {
+  margin-top: 12px;
+  width: auto;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.95);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .analysis-item {
   padding: 14px;
   border-radius: 14px;
@@ -377,8 +473,23 @@ input[type="range"] {
     grid-template-columns: 1fr;
   }
 
+  .quiz-card {
+    padding-right: 20px;
+  }
+
+  .timer-pill {
+    position: static;
+    transform: none;
+    margin-left: 0;
+    width: 100%;
+  }
+
   .analysis-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analysis-actions {
+    flex-direction: column;
   }
 
   .hero,
